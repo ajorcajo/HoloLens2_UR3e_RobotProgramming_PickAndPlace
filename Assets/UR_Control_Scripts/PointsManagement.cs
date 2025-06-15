@@ -29,7 +29,7 @@ public class PointsManagement : MonoBehaviour
     public Vector3 real_rot_Degree = new Vector3();
     public Vector3 real_rot_Radian = new Vector3();
 
-    // Robot Porgramation
+    // Robot Programation
     public GameObject PanelProgramation;
     // Pick and Place
     public GameObject PickAndPlace;
@@ -57,6 +57,9 @@ public class PointsManagement : MonoBehaviour
     public Transform MoveJ_Point_Pos;
     public Transform MoveP_Point_Pos;
     public Transform tcp;
+
+    // Tipo de Pick and Place
+    public int case_pickandplace;
 
     // Contadores
     public int cont_points = 0;
@@ -110,6 +113,7 @@ public class PointsManagement : MonoBehaviour
         gripper_state = true;
         completed = false;
         gripper_action = false;
+        case_pickandplace = 0;
     }
 
     void inicio()
@@ -332,7 +336,7 @@ public class PointsManagement : MonoBehaviour
 
     public void CreatePickandPlace4Points()
     {
-
+        case_pickandplace = 1;
         float altura = 0.1f;           // Movimiento vertical (subir/bajar)
         float desplazamiento = 0.3f;   // Movimiento horizontal entre pick y place
 
@@ -368,9 +372,13 @@ public class PointsManagement : MonoBehaviour
         createGripper();
         Points[7].PointObject.transform.position = origen + Vector3.forward * desplazamiento + Vector3.right * desplazamiento;
 
-        // --- Punto 8: volver al origen ---
+        // --- Punto 8: encima del punto de destino ---
         createmoveL();
-        Points[8].PointObject.transform.position = origen;
+            Points[8].PointObject.transform.position = Points[5].PointObject.transform.position;
+        // --- Punto 9: volver al origen ---
+        createmoveL();
+        Points[9].PointObject.transform.position = origen;
+
     }
 
 
@@ -383,6 +391,27 @@ void Update()
 
 
         gripper_bandera = gripper_action;
+
+        //Algoritmo pick and place 4 points:
+        switch (case_pickandplace)
+        {
+                case 1:
+                    // Punto 1 <- misma posición que Punto 4
+                    Points[1].PointObject.transform.position = Points[4].PointObject.transform.position;
+                    Points[1].PointObject.SetActive(false);
+
+                    // Punto 8 <- misma posición que Punto 5
+                    Points[8].PointObject.transform.position = Points[5].PointObject.transform.position;
+                    Points[8].PointObject.SetActive(false);
+
+                break;
+                case 2:
+                    
+                    break;
+                case 3:
+                    
+                    break;
+        }
 
         /*
         //Pruebas
