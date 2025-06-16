@@ -37,6 +37,7 @@ public class UIPanel_Control : MonoBehaviour
     public GameObject JoystickPanel;
     public GameObject PanelMuestreo;
     public GameObject ProgramationPanel;
+    public GameObject PickAndPlacePanel;
 
     public GameObject RastroPosReal;
 
@@ -102,6 +103,7 @@ public class UIPanel_Control : MonoBehaviour
         JoystickPanel.SetActive(false);
         PanelMuestreo.SetActive(false);
         ProgramationPanel.SetActive(false);
+        PickAndPlacePanel.SetActive(false);
     }
 
     public void popup(GameObject Panel)
@@ -130,6 +132,7 @@ public class UIPanel_Control : MonoBehaviour
             JoystickPanel.SetActive(false);
             PanelMuestreo.SetActive(false);
             ProgramationPanel.SetActive(false);
+            PickAndPlacePanel.SetActive(false);
         }
         if (Panel == DiagnosticPanel)
         {
@@ -137,6 +140,7 @@ public class UIPanel_Control : MonoBehaviour
             JoystickPanel.SetActive(false);
             PanelMuestreo.SetActive(false);
             ProgramationPanel.SetActive(false);
+            PickAndPlacePanel.SetActive(false);
         }
         if (Panel == JoystickPanel)
         {
@@ -144,6 +148,7 @@ public class UIPanel_Control : MonoBehaviour
             DiagnosticPanel.SetActive(false);
             PanelMuestreo.SetActive(false);
             ProgramationPanel.SetActive(false);
+            PickAndPlacePanel.SetActive(false);
         }
         if (Panel == PanelMuestreo)
         {
@@ -151,6 +156,7 @@ public class UIPanel_Control : MonoBehaviour
             DiagnosticPanel.SetActive(false);
             JoystickPanel.SetActive(false);
             ProgramationPanel.SetActive(false);
+            PickAndPlacePanel.SetActive(false);
         }
         if (Panel == ProgramationPanel)
         {
@@ -158,6 +164,15 @@ public class UIPanel_Control : MonoBehaviour
             DiagnosticPanel.SetActive(false);
             JoystickPanel.SetActive(false);
             PanelMuestreo.SetActive(false);
+            PickAndPlacePanel.SetActive(false);
+        }
+        if (Panel == PickAndPlacePanel)
+        {
+            ConnectionPanel.SetActive(false);
+            DiagnosticPanel.SetActive(false);
+            JoystickPanel.SetActive(false);
+            PanelMuestreo.SetActive(false);
+            ProgramationPanel.SetActive(false);
         }
     }
 

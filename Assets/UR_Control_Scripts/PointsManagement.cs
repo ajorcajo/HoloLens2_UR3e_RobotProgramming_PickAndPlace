@@ -29,8 +29,11 @@ public class PointsManagement : MonoBehaviour
     public Vector3 real_rot_Degree = new Vector3();
     public Vector3 real_rot_Radian = new Vector3();
 
-
+    // Robot Porgramation
     public GameObject PanelProgramation;
+    // Pick and Place
+    public GameObject PickAndPlace;
+
     public GameObject Origin;
     public GameObject Origin_BaseRef;
     public GameObject Rastro;
@@ -327,8 +330,52 @@ public class PointsManagement : MonoBehaviour
         }
     }
 
-    // Update is called once per frame
-    void Update()
+    public void CreatePickandPlace4Points()
+    {
+
+        float altura = 0.1f;           // Movimiento vertical (subir/bajar)
+        float desplazamiento = 0.3f;   // Movimiento horizontal entre pick y place
+
+        // Guardamos el origen
+        Vector3 origen = Points[0].PointObject.transform.position;
+
+        // --- Punto 1: encima del punto de recogida ---
+        createmoveL();
+        Points[1].PointObject.transform.position = origen + Vector3.forward * desplazamiento + Vector3.up * altura;
+        //Points[1].PointObject.SetActive(false);  // Punto oculto
+
+        // --- Punto 2: punto de recogida ---
+        createmoveL();
+        Points[2].PointObject.transform.position = origen + Vector3.forward * desplazamiento;
+
+        // --- Punto 3: cerrar gripper ---
+        createGripper();
+        Points[3].PointObject.transform.position = origen + Vector3.forward * desplazamiento;
+
+        // --- Punto 4: subir con objeto ---
+        createmoveL();
+        Points[4].PointObject.transform.position = origen + Vector3.forward * desplazamiento + Vector3.up * altura;
+
+        // --- Punto 5: mover al destino (horizontal derecha) ---
+        createmoveL();
+        Points[5].PointObject.transform.position = origen + Vector3.forward * desplazamiento + Vector3.right * desplazamiento + Vector3.up * altura;
+
+        // --- Punto 6: bajar al destino ---
+        createmoveL();
+        Points[6].PointObject.transform.position = origen + Vector3.forward * desplazamiento + Vector3.right * desplazamiento;
+
+        // --- Punto 7: abrir gripper ---
+        createGripper();
+        Points[7].PointObject.transform.position = origen + Vector3.forward * desplazamiento + Vector3.right * desplazamiento;
+
+        // --- Punto 8: volver al origen ---
+        createmoveL();
+        Points[8].PointObject.transform.position = origen;
+    }
+
+
+// Update is called once per frame
+void Update()
     {
         offsetpos.x = Math.Abs(targetpos.x - (float)ur_data_processing.UR_Stream_Data.C_Position[0]);
         offsetpos.y = Math.Abs(targetpos.y - (float)ur_data_processing.UR_Stream_Data.C_Position[1]);
@@ -401,7 +448,7 @@ public class PointsManagement : MonoBehaviour
 
         cont_timer++;
         //tcp.position = tcpPosition;
-        if (PanelProgramation.activeSelf)
+        if (PanelProgramation.activeSelf || PickAndPlace.activeSelf)
         {
             Origin.SetActive(true);
         }
