@@ -19,6 +19,12 @@
 *.blend1
 *.mp4
 
+# Ignorar todo dentro de Assets/Scenes
+Assets/Scenes/*
+
+# ¡Excepto! el archivo PruebaUR.unity
+!Assets/Scenes/PruebaUR.unity
+
 # MemoryCaptures can get excessive in size.
 # They also could contain extremely sensitive data
 [Mm]emoryCaptures/
