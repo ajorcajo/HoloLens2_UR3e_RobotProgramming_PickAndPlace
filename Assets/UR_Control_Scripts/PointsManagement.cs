@@ -10,6 +10,12 @@ using System.Text;
 
 using UnityEngine.UI;
 using UnityEngine;
+using UnityEngine.XR;
+
+// HAND TRACKING PACKAGES
+using MixedReality.Toolkit;
+using MixedReality.Toolkit.Input;
+using MixedReality.Toolkit.Subsystems;
 
 using TMPro;
 
@@ -31,8 +37,17 @@ public class PointsManagement : MonoBehaviour
 
     // Robot Programation
     public GameObject PanelProgramation;
-    // Pick and Place
+
+    // Pick and Place + HAND TRACKING VARIABLES
     public GameObject PickAndPlace;
+    public GameObject RightHand;
+    public GameObject LeftHand;
+    public GameObject Hand;
+
+    private HandsAggregatorSubsystem aggregator;
+
+    public int case_pickandplace;
+    public int activar_pinza;
 
     public GameObject Origin;
     public GameObject Origin_BaseRef;
@@ -57,9 +72,6 @@ public class PointsManagement : MonoBehaviour
     public Transform MoveJ_Point_Pos;
     public Transform MoveP_Point_Pos;
     public Transform tcp;
-
-    // Tipo de Pick and Place
-    public int case_pickandplace;
 
     // Contadores
     public int cont_points = 0;
@@ -113,7 +125,11 @@ public class PointsManagement : MonoBehaviour
         gripper_state = true;
         completed = false;
         gripper_action = false;
+
+        // HAND TRACKING VARIABLES
+        aggregator = XRSubsystemHelpers.GetFirstRunningSubsystem<HandsAggregatorSubsystem>();
         case_pickandplace = 0;
+        activar_pinza = 0;
     }
 
     void inicio()
@@ -385,6 +401,34 @@ public class PointsManagement : MonoBehaviour
 // Update is called once per frame
 void Update()
     {
+        // HAND TRACKING AND PICK AND PLACE CODE
+
+        if (case_pickandplace == 2) {
+            // 1. Detectar mano derecha y mostrar su posición
+            if (aggregator.TryGetJoint(TrackedHandJoint.Palm, XRNode.RightHand, out HandJointPose rightPalm))
+            {
+                Hand = RightHand;
+            }
+
+            // 2. Detectar mano izquierda
+            if (aggregator.TryGetJoint(TrackedHandJoint.Palm, XRNode.LeftHand, out HandJointPose leftPalm))
+            {
+                Hand = LeftHand;
+            }
+
+            // 3. Detectar gesto de cerrar mano (pinch) en derecha
+            if (aggregator.TryGetPinchProgress(XRNode.RightHand, out bool isReadyToPinchRight, out bool isPinchingRight, out float pinchAmountRight))
+            {
+
+                activar_pinza = 1;
+            }
+            // 4. Detectar gesto de cerrar mano (pinch) en izquierda
+            if (aggregator.TryGetPinchProgress(XRNode.LeftHand, out bool isReadyToPinchLeft, out bool isPinchingLeft, out float pinchAmountLeft))
+            {
+                activar_pinza = 1;
+            }
+        }
+
         offsetpos.x = Math.Abs(targetpos.x - (float)ur_data_processing.UR_Stream_Data.C_Position[0]);
         offsetpos.y = Math.Abs(targetpos.y - (float)ur_data_processing.UR_Stream_Data.C_Position[1]);
         offsetpos.z = Math.Abs(targetpos.z - (float)ur_data_processing.UR_Stream_Data.C_Position[2]);
