@@ -1,7 +1,6 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
-using System.Diagnostics;
 using System.Net.Sockets;
 using System;
 using System.Threading;
@@ -18,6 +17,8 @@ using MixedReality.Toolkit.Input;
 using MixedReality.Toolkit.Subsystems;
 
 using TMPro;
+using System.Collections.Specialized;
+
 
 public class PointsManagement : MonoBehaviour
 {
@@ -42,7 +43,7 @@ public class PointsManagement : MonoBehaviour
     public GameObject PickAndPlace;
     public GameObject RightHand;
     public GameObject LeftHand;
-    public GameObject Hand;
+    private GameObject Hand;
 
     private HandsAggregatorSubsystem aggregator;
 
@@ -157,6 +158,31 @@ public class PointsManagement : MonoBehaviour
             if (cont_points < 15)
             {
                 Vector3 newPosition = Points[cont_points - 1].PointObject.transform.position + new Vector3(0.2f, 0, -0.2f);
+                GameObject newObject = Instantiate(MoveL_Point, newPosition, Points[cont_points - 1].PointObject.transform.rotation);
+                AddToArray(newObject, 0);
+                newObject.SetActive(true);
+                newObject.transform.SetParent(PointsParent, false);
+                newObject.transform.position = newPosition;
+
+            }
+            else
+            {
+                aviso_type = 1;
+            }
+        }
+    }
+
+    public void createmoveL_Pos(Vector3 delta)
+    {
+        if (isInside == false)
+        {
+            aviso_type = 2;
+        }
+        else
+        {
+            if (cont_points < 50)
+            {
+                Vector3 newPosition = Points[cont_points - 1].PointObject.transform.position + delta;
                 GameObject newObject = Instantiate(MoveL_Point, newPosition, Points[cont_points - 1].PointObject.transform.rotation);
                 AddToArray(newObject, 0);
                 newObject.SetActive(true);
@@ -396,37 +422,138 @@ public class PointsManagement : MonoBehaviour
         Points[9].PointObject.transform.position = origen;
 
     }
+    public void StartHandTracking()
+    {
+        case_pickandplace = 2;
+    }
+    private GameObject trackedHand = null; // la mano que se está siguiendo
+    private bool handDetected = false;
+    private float handDetectedStartTime = 0f;
+    private bool trackingActive = false;
+
+    private Vector3 lastHandPosition;
+    private float lastMoveLTime = 0f;
+    private float waitDuration = 2.0f;
+    private float intervalMoveL = 2.0f;
 
 
-// Update is called once per frame
-void Update()
+
+    // Update is called once per frame
+    void Update()
     {
         // HAND TRACKING AND PICK AND PLACE CODE
 
-        if (case_pickandplace == 2) {
-            // 1. Detectar mano derecha y mostrar su posición
-            if (aggregator.TryGetJoint(TrackedHandJoint.Palm, XRNode.RightHand, out HandJointPose rightPalm))
-            {
-                Hand = RightHand;
-            }
+        //Algoritmo pick and place
+        switch (case_pickandplace)
+        {
+            case 1:
+                // Punto 1 <- misma posición que Punto 4
+                Points[1].PointObject.transform.position = Points[4].PointObject.transform.position;
+                Points[1].PointObject.SetActive(false);
 
-            // 2. Detectar mano izquierda
-            if (aggregator.TryGetJoint(TrackedHandJoint.Palm, XRNode.LeftHand, out HandJointPose leftPalm))
-            {
-                Hand = LeftHand;
-            }
+                // Punto 8 <- misma posición que Punto 5
+                Points[8].PointObject.transform.position = Points[5].PointObject.transform.position;
+                Points[8].PointObject.SetActive(false);
 
-            // 3. Detectar gesto de cerrar mano (pinch) en derecha
-            if (aggregator.TryGetPinchProgress(XRNode.RightHand, out bool isReadyToPinchRight, out bool isPinchingRight, out float pinchAmountRight))
-            {
+                break;
+            case 2:
+                // 1. Detectar mano derecha y mostrar su posición
+                if (aggregator.TryGetJoint(TrackedHandJoint.Palm, XRNode.RightHand, out HandJointPose rightPalm))
+                {
+                    Hand = RightHand;
+                }
+                // 2. Detectar mano izquierda
+                else
+                {
+                    if (aggregator.TryGetJoint(TrackedHandJoint.Palm, XRNode.LeftHand, out HandJointPose leftPalm))
+                    {
+                        Hand = LeftHand;
+                    }
+                    else
+                    {
+                        Hand = null;
+                    }
+                }
+                
+                // 2. Evaluar si hay mano visible
+                if (Hand != null)
+                {
+                    if (!handDetected || trackedHand != Hand)
+                    {
+                        // Primera vez o cambio de mano -> reiniciar temporizador
+                        handDetected = true;
+                        handDetectedStartTime = Time.time;
+                        trackedHand = Hand;
+                        UnityEngine.Debug.Log("Empezando Cuenta hasta 2 segundos");
+                    }
+                    else
+                    {
+                        float timeHeld = Time.time - handDetectedStartTime;
 
-                activar_pinza = 1;
-            }
-            // 4. Detectar gesto de cerrar mano (pinch) en izquierda
-            if (aggregator.TryGetPinchProgress(XRNode.LeftHand, out bool isReadyToPinchLeft, out bool isPinchingLeft, out float pinchAmountLeft))
-            {
-                activar_pinza = 1;
-            }
+                        if (!trackingActive && timeHeld >= waitDuration)
+                        {
+                            // Activar seguimiento
+                            trackingActive = true;
+                            lastHandPosition = Hand.transform.position;
+                            lastMoveLTime = Time.time;
+                            UnityEngine.Debug.Log("Seguimiento activado");
+                        }
+                    }
+                }
+                else
+                {
+                    // Mano no visible -> reset
+                    if (handDetected || trackingActive)
+
+                        UnityEngine.Debug.Log("Mano perdida. Reiniciando seguimiento.");
+
+                    handDetected = false;
+                    trackingActive = false;
+                    trackedHand = null;
+                }
+
+                // 3. Si el seguimiento está activo -> aplicar traslación cada 0.5 s
+                if (trackingActive && Time.time - lastMoveLTime >= intervalMoveL && Hand != null)
+                {
+                    Vector3 currentPosition = Hand.transform.position;
+                    Vector3 delta = currentPosition - lastHandPosition;
+
+                    lastHandPosition = currentPosition;
+                    lastMoveLTime = Time.time;
+
+                    createmoveL_Pos(delta);
+                    UnityEngine.Debug.Log("Punto CREADOOO");
+                }
+
+                // 4. Detectar gesto de pinza solo si hay seguimiento activo y mano válida
+                if (trackingActive && Hand != null)
+                {
+                    XRNode currentHandNode = Hand == RightHand ? XRNode.RightHand : XRNode.LeftHand;
+
+                    if (aggregator.TryGetPinchProgress(currentHandNode, out bool isReadyToPinch, out bool isPinching, out float pinchAmount))
+                    {
+                        if (isPinching && activar_pinza == 0)
+                        {
+                            activar_pinza = 1;
+                            createGripper();
+                            UnityEngine.Debug.Log("Gesto de pinza detectado — Gripper activado");
+                        }
+                        else if (!isPinching)
+                        {
+                            activar_pinza = 0;
+                        }
+                    }
+                    else
+                    {
+                        activar_pinza = 0;
+                    }
+                }
+
+
+                break;
+            case 3:
+
+                break;
         }
 
         offsetpos.x = Math.Abs(targetpos.x - (float)ur_data_processing.UR_Stream_Data.C_Position[0]);
@@ -436,26 +563,6 @@ void Update()
 
         gripper_bandera = gripper_action;
 
-        //Algoritmo pick and place 4 points:
-        switch (case_pickandplace)
-        {
-                case 1:
-                    // Punto 1 <- misma posición que Punto 4
-                    Points[1].PointObject.transform.position = Points[4].PointObject.transform.position;
-                    Points[1].PointObject.SetActive(false);
-
-                    // Punto 8 <- misma posición que Punto 5
-                    Points[8].PointObject.transform.position = Points[5].PointObject.transform.position;
-                    Points[8].PointObject.SetActive(false);
-
-                break;
-                case 2:
-                    
-                    break;
-                case 3:
-                    
-                    break;
-        }
 
         /*
         //Pruebas
