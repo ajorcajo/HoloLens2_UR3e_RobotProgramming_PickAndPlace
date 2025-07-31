@@ -114,6 +114,13 @@ public class PointsManagement : MonoBehaviour
     public float radioGrande = 0f;
     public float radioPequeña = 0f;
 
+    // Pick And Place Points
+    public float altura = 0.1f;           // Movimiento vertical (subir/bajar)
+    public float desplazamiento = 0.3f;
+    public TextMeshProUGUI altura_label, desplazamiento_label;
+    private Vector3[] initialOffsets;
+    private Vector3[] lastPositions;
+
 
     // Start is called before the first frame update
     void Start()
@@ -380,11 +387,54 @@ public class PointsManagement : MonoBehaviour
         }
     }
 
+    public void Sum_Altura()
+    {
+        altura = altura + 0.02f;
+        UpdateVelDespl();
+    }
+
+    public void Sum_Desplazamiento()
+    {
+        desplazamiento = desplazamiento + 0.02f;
+        UpdateVelDespl();
+    }
+
+    public void Rest_Altura()
+    {
+        if (altura > 0.02)
+        {
+            altura = altura - 0.02f;
+            UpdateVelDespl();
+        }
+        else
+        {
+            altura = 0.02f;
+
+        }
+
+    }
+
+    public void Rest_Desplazamiento()
+    {
+        if(desplazamiento > 0.02)
+        {
+            desplazamiento = desplazamiento - 0.02f;
+            UpdateVelDespl();
+        }
+        else
+        {
+            desplazamiento = 0.02f;
+
+        }
+ 
+    }
+
+
+
     public void CreatePickandPlace4Points()
     {
         case_pickandplace = 1;
-        float altura = 0.1f;           // Movimiento vertical (subir/bajar)
-        float desplazamiento = 0.3f;   // Movimiento horizontal entre pick y place
+         // Movimiento horizontal entre pick y place
 
         // Guardamos el origen
         Vector3 origen = Points[0].PointObject.transform.position;
@@ -425,7 +475,83 @@ public class PointsManagement : MonoBehaviour
         createmoveL();
         Points[9].PointObject.transform.position = origen;
 
+        int n = Points.Length;
+        initialOffsets = new Vector3[n];
+        lastPositions = new Vector3[n];
+
+        Vector3 basePos = Points[1].PointObject.transform.position;
+        for (int i = 1; i < n; i++)
+        {
+            initialOffsets[i] = Points[i].PointObject.transform.position - basePos;
+            lastPositions[i] = Points[i].PointObject.transform.position;
+        }
+
     }
+
+    public void UpdateVelDespl()
+    {
+        // --- Punto 1: encima del punto de recogida ---
+        Points[1].PointObject.transform.position = Points[0].PointObject.transform.position + Vector3.forward * desplazamiento + Vector3.up * altura;
+
+        // --- Punto 2: punto de recogida ---
+        Points[2].PointObject.transform.position = Points[0].PointObject.transform.position + Vector3.forward * desplazamiento;
+
+        // --- Punto 3: cerrar gripper ---
+        Points[3].PointObject.transform.position = Points[0].PointObject.transform.position + Vector3.forward * desplazamiento;
+
+        // --- Punto 4: subir con objeto ---
+        Points[4].PointObject.transform.position = Points[0].PointObject.transform.position + Vector3.forward * desplazamiento + Vector3.up * altura;
+
+        // --- Punto 5: mover al destino (horizontal derecha) ---
+        Points[5].PointObject.transform.position = Points[0].PointObject.transform.position + Vector3.forward * desplazamiento + Vector3.right * desplazamiento + Vector3.up * altura;
+
+        // --- Punto 6: bajar al destino ---
+        Points[6].PointObject.transform.position = Points[0].PointObject.transform.position + Vector3.forward * desplazamiento + Vector3.right * desplazamiento;
+
+        // --- Punto 7: abrir gripper ---
+        Points[7].PointObject.transform.position = Points[0].PointObject.transform.position + Vector3.forward * desplazamiento + Vector3.right * desplazamiento;
+
+        // --- Punto 8: encima del punto de destino ---
+        Points[8].PointObject.transform.position = Points[5].PointObject.transform.position;
+        Points[9].PointObject.transform.position = Points[0].PointObject.transform.position;
+        for (int i = 0; i < Points.Length; i++)
+        {
+            lastPositions[i] = Points[i].PointObject.transform.position;
+        }
+    }
+
+    public void MoverTodosRelativoA(int indexChanged, Vector3 delta)
+    {
+        for (int i = 1; i < Points.Length; i++)
+        {
+            if (i != indexChanged)
+            {
+                Points[i].PointObject.transform.position += delta;
+            }
+            lastPositions[i] = Points[i].PointObject.transform.position;
+        }
+    }
+
+    public void AjustarPuntosVerticales()
+    {
+        // Punto 3 = justo encima del 2
+        if (Points.Length > 3)
+        {
+            Vector3 base2 = Points[2].PointObject.transform.position;
+            Points[3].PointObject.transform.position = new Vector3(base2.x, base2.y, base2.z);
+            lastPositions[3] = Points[3].PointObject.transform.position;
+        }
+
+        // Punto 7 = justo encima del 6
+        if (Points.Length > 7)
+        {
+            Vector3 base6 = Points[6].PointObject.transform.position;
+            Points[7].PointObject.transform.position = new Vector3(base6.x, base6.y, base6.z);
+            lastPositions[7] = Points[7].PointObject.transform.position;
+        }
+    }
+
+
     public void StartHandTracking()
     {
         case_pickandplace = 2;
@@ -455,13 +581,25 @@ public class PointsManagement : MonoBehaviour
         switch (case_pickandplace)
         {
             case 1:
-                // Punto 1 <- misma posición que Punto 4
-                Points[1].PointObject.transform.position = Points[4].PointObject.transform.position;
-                Points[1].PointObject.SetActive(false);
-
-                // Punto 8 <- misma posición que Punto 5
-                Points[8].PointObject.transform.position = Points[5].PointObject.transform.position;
-                Points[8].PointObject.SetActive(false);
+                if(bandera_sendcommand == false)
+                {
+                    for (int i = 1; i < Points.Length; i++)
+                    {
+                        Vector3 currentPos = Points[i].PointObject.transform.position;
+                        if (currentPos != lastPositions[i])
+                        {
+                            Vector3 delta = currentPos - lastPositions[i];
+                            MoverTodosRelativoA(i, delta);
+                            break; // Solo responde a un cambio por frame
+                        }
+                    }
+                    Points[9].PointObject.transform.position = Points[0].PointObject.transform.position;
+                    // Puntos especiales que siempre deben estar sobre otro
+                    AjustarPuntosVerticales();
+                }
+                
+                altura_label.text = altura.ToString("F2", CultureInfo.InvariantCulture);
+                desplazamiento_label.text = desplazamiento.ToString("F2", CultureInfo.InvariantCulture);
 
                 break;
             case 2:
@@ -873,9 +1011,21 @@ public class PointsManagement : MonoBehaviour
         // YOU NEED TO MAKE SURE THE BASE AXES REFERENCES OF THE ROBOT ARE THE SAME AS UNITY, FOR YOUR SECURITY
         RobotController controller = new RobotController(UIPanel_Control.global_ip_address, ur_data_processing.UR_Control_Data.port_number);
 
-        targetpos.x = Points[cont].PointObject.transform.localPosition.x;
-        targetpos.y = Points[cont].PointObject.transform.localPosition.y;
-        targetpos.z = -Points[cont].PointObject.transform.localPosition.z;
+        float condition = -Points[cont].PointObject.transform.localPosition.z;
+        if (condition > 0.05)
+        {
+            targetpos.x = Points[cont].PointObject.transform.localPosition.x;
+            targetpos.y = Points[cont].PointObject.transform.localPosition.y;
+            targetpos.z = -Points[cont].PointObject.transform.localPosition.z;
+            UnityEngine.Debug.Log("Punto Encima de la horizontal del robot!!");
+        }
+        else
+        {
+            UnityEngine.Debug.Log("Punto debajo de la horizontal del robot!!");
+            targetpos.x = Points[cont].PointObject.transform.localPosition.x;
+            targetpos.y = Points[cont].PointObject.transform.localPosition.y;
+            targetpos.z = (float)0.05;
+        }
 
         // Conversion of rotation axes
         // Aplicar la nueva rotación al objeto
