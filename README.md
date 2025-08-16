@@ -1,4 +1,4 @@
-# UR_hololens2_Unity
+# HoloLens2_UR3e_RobotProgramming_PickAndPlace
 
 <p align="center">
 <img src="https://github.com/ajorcajo/UR_Hololens2_Unity/blob/main/images/InAction.png" width="800" height="500">
@@ -51,10 +51,10 @@ alvarojavierorcajodomingo@gmail.com
 ```bash
 @misc{AlvaroOrcajo_UR_Hololens2_Unity,
   author = {Álvaro Javier Orcajo Domingo},
-  title = {Virtual/Mixed Reality as a Teaching Tool in the Field of Automation},
-  year = {2024},
+  title = {La Realidad Mixta para la Programaci´on y Control de Robots en Procesos Industriales},
+  year = {2025},
   publisher = {GitHub},
   journal = {GitHub repository},
-  howpublished = {\url{https://github.com/ajorcajo/UR_Hololens2_Unity}}
+  howpublished = {\url{https://github.com/ajorcajo/HoloLens2_UR3e_RobotProgramming_PickAndPlace}}
 }
 ```
