@@ -1,10 +1,10 @@
-# HoloLens2_UR3e_RobotProgramming_PickAndPlace
+# Mixed Reality for the Programming and Control of Robots in Industrial Processes
 
 <p align="center">
 <img src="https://github.com/ajorcajo/UR_Hololens2_Unity/blob/main/images/InAction.png" width="800" height="500">
 </p>
 
-In this collaborative scholarship, an application has been developed to innovate the teaching of robotics through virtual reality, specifically using the Microsoft HoloLens 2 device. This application, created with the Unity development tool along with the Microsoft Mixed Reality Toolkit, will teach students the different types of movements (MoveJ, MoveL, MoveP) available for a Universal Robots UR3e robot.
+In this collaborative scholarship with my master´s thesis, an application has been developed to innovate the teaching of robotics through virtual reality, specifically using the Microsoft HoloLens 2 device. This application, created with the Unity development tool along with the Microsoft Mixed Reality Toolkit, will teach students the different types of movements (MoveJ, MoveL, MoveP) available for a Universal Robots UR3e robot.
 
 Moreover, with mixed reality, users will be able to see the exact path traced by the robot, creating an immersive environment and unique experiences for the user, thus greatly enhancing information retention and learning. This statement has been demonstrated through my following final degree project:
 
@@ -51,7 +51,7 @@ alvarojavierorcajodomingo@gmail.com
 ```bash
 @misc{AlvaroOrcajo_UR_Hololens2_Unity,
   author = {Álvaro Javier Orcajo Domingo},
-  title = {La Realidad Mixta para la Programaci´on y Control de Robots en Procesos Industriales},
+  title = {Mixed Reality for the Programming and Control of Robots in Industrial Processes},
   year = {2025},
   publisher = {GitHub},
   journal = {GitHub repository},
