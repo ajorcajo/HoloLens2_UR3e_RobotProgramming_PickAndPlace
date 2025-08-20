@@ -285,9 +285,21 @@ public class PointsManagement : MonoBehaviour
 
     public void createGripperHandTracking()
     {
-        gripper_state = !gripper_state;
+        /*
+         * gripper_state = !gripper_state;
         RobotController controller = new RobotController(UIPanel_Control.global_ip_address, ur_data_processing.UR_Control_Data.port_number);
         controller.SetDigitalOutputsAsync(gripper_state);
+        */
+        gripper_state = !gripper_state;
+
+        if (RobotSpeedController != null && RobotSpeedController.IsConnected())
+        {
+            RobotSpeedController.SetDigitalOutputs(gripper_state);
+        }
+        else
+        {
+            UnityEngine.Debug.LogWarning("Controlador no conectado para el cambio de pinza.");
+        }
     }
 
 
@@ -1301,6 +1313,40 @@ public class PointsManagement : MonoBehaviour
         {
             return connected;
         }
+
+        public void SetDigitalOutputs(bool gripperState)
+        {
+            if (!connected || stream == null)
+            {
+                UnityEngine.Debug.LogWarning("[RealtimeSpeedController] No conectado. Ignorando comando de pinza.");
+                return;
+            }
+
+            try
+            {
+                // Comando OFF luego ON para asegurar el cambio de estado
+                string command1 = $"set_tool_digital_out({(gripperState ? "1" : "0")}, False)\n";
+                string command2 = $"set_tool_digital_out({(gripperState ? "0" : "1")}, True)\n";
+
+                byte[] buffer1 = Encoding.ASCII.GetBytes(command1);
+                byte[] buffer2 = Encoding.ASCII.GetBytes(command2);
+
+                stream.Write(buffer1, 0, buffer1.Length);
+                stream.Flush();
+                Thread.Sleep(500); // Esperar medio segundo
+
+                stream.Write(buffer2, 0, buffer2.Length);
+                stream.Flush();
+                Thread.Sleep(1500); // Esperar a que la pinza actúe
+
+                UnityEngine.Debug.Log("[RealtimeSpeedController] Comando de pinza enviado correctamente.");
+            }
+            catch (Exception e)
+            {
+                UnityEngine.Debug.LogError("[RealtimeSpeedController] Error al enviar comando de pinza: " + e.Message);
+            }
+        }
+
     }
 
 }
