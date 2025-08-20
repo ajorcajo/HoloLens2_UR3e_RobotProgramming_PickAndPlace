@@ -18,6 +18,8 @@ using MixedReality.Toolkit.Subsystems;
 
 using TMPro;
 using System.Collections.Specialized;
+using System.Diagnostics;
+using static PointsManagement;
 
 
 public class PointsManagement : MonoBehaviour
@@ -80,10 +82,10 @@ public class PointsManagement : MonoBehaviour
     public int cont = 1;
     public int aviso_type = 0;
 
-    //TIPO CLASE PUNTO
+    // TIPO CLASE PUNTO
     public class point
     {
-        // Type is 0 = MoveL ; 1 = MoveJ ; 2 = MoveP
+        // Type is 0 = MoveL ; 1 = MoveJ ; 2 = MoveP; 3 = Gripper
         public int type;
         public GameObject PointObject;
         public LineRenderer line;
@@ -120,6 +122,10 @@ public class PointsManagement : MonoBehaviour
     public TextMeshProUGUI altura_label, desplazamiento_label;
     private Vector3[] initialOffsets;
     private Vector3[] lastPositions;
+
+    // Hand Tracking controller
+
+    public RealtimeSpeedController RobotSpeedController = new RealtimeSpeedController();
 
 
     // Start is called before the first frame update
@@ -275,6 +281,13 @@ public class PointsManagement : MonoBehaviour
                 aviso_type = 1;
             }
         }
+    }
+
+    public void createGripperHandTracking()
+    {
+        gripper_state = !gripper_state;
+        RobotController controller = new RobotController(UIPanel_Control.global_ip_address, ur_data_processing.UR_Control_Data.port_number);
+        controller.SetDigitalOutputsAsync(gripper_state);
     }
 
 
@@ -555,7 +568,9 @@ public class PointsManagement : MonoBehaviour
     public void StartHandTracking()
     {
         case_pickandplace = 2;
+        RobotSpeedController.Connect(UIPanel_Control.global_ip_address, ur_data_processing.UR_Control_Data.port_number);
     }
+
     private GameObject trackedHand = null; // la mano que se está siguiendo
     private bool handDetected = false;
     private float handDetectedStartTime = 0f;
@@ -603,6 +618,8 @@ public class PointsManagement : MonoBehaviour
 
                 break;
             case 2:
+
+                /*
                 // 1. Detectar mano derecha y mostrar su posición
                 if (aggregator.TryGetJoint(TrackedHandJoint.Palm, XRNode.RightHand, out HandJointPose rightPalm))
                 {
@@ -677,7 +694,7 @@ public class PointsManagement : MonoBehaviour
                     if (!bandera_sendcommand && Points.Length >= 2)
                     {
                         UnityEngine.Debug.Log("Inicio de secuencia de envío de puntos");
-                        sendcommand();
+                        //sendcommand();
                     }
                 }
 
@@ -713,7 +730,109 @@ public class PointsManagement : MonoBehaviour
 
 
                 }
-                    break;
+
+                */
+
+
+                // 1. Detectar mano derecha y mostrar su posición
+                if (aggregator.TryGetJoint(TrackedHandJoint.Palm, XRNode.RightHand, out HandJointPose rightPalm))
+                {
+                    Hand = RightHand;
+                }
+                // 2. Detectar mano izquierda
+                else if (aggregator.TryGetJoint(TrackedHandJoint.Palm, XRNode.LeftHand, out HandJointPose leftPalm))
+                {
+                    Hand = LeftHand;
+                }
+                else
+                {
+                    Hand = null;
+                }
+
+                // 3. Evaluar si hay mano visible
+                if (Hand != null)
+                {
+                    if (!handDetected || trackedHand != Hand)
+                    {
+                        // Primera vez o cambio de mano -> reiniciar temporizador
+                        handDetected = true;
+                        handDetectedStartTime = Time.time;
+                        trackedHand = Hand;
+                        UnityEngine.Debug.Log("Empezando Cuenta hasta 2 segundos");
+                    }
+                    else
+                    {
+                        float timeHeld = Time.time - handDetectedStartTime;
+
+                        if (!trackingActive && timeHeld >= waitDuration)
+                        {
+                            // Activar seguimiento
+                            trackingActive = true;
+                            lastHandPosition = Hand.transform.position;
+                            UnityEngine.Debug.Log("Seguimiento activado");
+                        }
+                    }
+                }
+                else
+                {
+                    // Mano no visible -> detener seguimiento y parar el robot
+                    if (handDetected || trackingActive)
+                    {
+                        UnityEngine.Debug.Log("Mano perdida. Reiniciando seguimiento.");
+                        RobotSpeedController.SendSpeedCommand(Vector3.zero);  // Parar robot
+                    }
+
+                    handDetected = false;
+                    trackingActive = false;
+                    trackedHand = null;
+                    wasPinching = false;
+                }
+
+                // 4. Seguimiento activo -> enviar velocidad con speedl()
+                if (trackingActive && Hand != null)
+                {
+                    Vector3 currentPosition = Hand.transform.position;
+                    Vector3 delta = currentPosition - lastHandPosition;
+                    lastHandPosition = currentPosition;
+
+                    // Calcular velocidad
+                    Vector3 velocity = delta / Time.deltaTime;
+
+                    // Limitar velocidad máxima
+                    float maxSpeed = 0.2f;
+                    if (velocity.magnitude > maxSpeed)
+                        velocity = velocity.normalized * maxSpeed;
+
+                    // Convertir a coordenadas UR (invertir Z)
+                    // ES NECESARIO HACER CONVERSION DE COORDENADAS AL TENER LA MANO OTRA REFERENCIA A LA DEL ROBOT
+                    Vector3 urSpeed = new Vector3(velocity.z, -velocity.x,velocity.y );
+
+                    // Enviar comando de velocidad al robot
+                    RobotSpeedController.SendSpeedCommand(urSpeed);
+
+                    // --- Gesto de pinza ---
+                    XRNode currentHandNode = Hand == RightHand ? XRNode.RightHand : XRNode.LeftHand;
+
+                    if (aggregator.TryGetPinchProgress(currentHandNode, out bool isReadyToPinch, out bool isPinching, out float pinchAmount))
+                    {
+                        if (isPinching != wasPinching)
+                        {
+                            RobotSpeedController.SendSpeedCommand(Vector3.zero);  // Parar robot
+                            createGripperHandTracking();
+                            UnityEngine.Debug.Log("Cambio de estado de pinza -> Ejecutar createGripper()");
+                        }
+                        wasPinching = isPinching;
+                    }
+                    else
+                    {
+                        wasPinching = false;
+                    }
+                }
+
+
+
+
+                break;
             case 3:
 
                 break;
@@ -832,14 +951,11 @@ public class PointsManagement : MonoBehaviour
                     targetpos.z = -Points[cont].PointObject.transform.localPosition.z;
                 }
 
-
                 // Conversion of rotation axes
                 // Aplicar la nueva rotación al objeto
                 rot.x = (float)ur_data_processing.UR_Stream_Data.C_Orientation[0];
                 rot.y = (float)ur_data_processing.UR_Stream_Data.C_Orientation[1];
                 rot.z = (float)ur_data_processing.UR_Stream_Data.C_Orientation[2];
-
-
 
                 coordinates[0] = targetpos.x.ToString("F4", CultureInfo.InvariantCulture);
                 coordinates[1] = targetpos.y.ToString("F4", CultureInfo.InvariantCulture);
@@ -847,7 +963,6 @@ public class PointsManagement : MonoBehaviour
                 coordinates[3] = rot.x.ToString("F4", CultureInfo.InvariantCulture);
                 coordinates[4] = rot.y.ToString("F4", CultureInfo.InvariantCulture);
                 coordinates[5] = rot.z.ToString("F4", CultureInfo.InvariantCulture);
-
 
                 switch (Points[cont].type)
                 {
@@ -1066,50 +1181,6 @@ public class PointsManagement : MonoBehaviour
         bandera_sendcommand = true;
     }
 
-    //void SendCommandForPoint(int i)
-    //{
-    //    if (i >= Points.Length) return;
-
-    //    RobotController controller = new RobotController(UIPanel_Control.global_ip_address, ur_data_processing.UR_Control_Data.port_number);
-
-    //    if (Points[i].type == 3)
-    //    {
-    //        targetpos = Points[i - 1].PointObject.transform.localPosition;
-    //    }
-    //    else
-    //    {
-    //        targetpos = Points[i].PointObject.transform.localPosition;
-    //    }
-
-    //    targetpos.z *= -1; // Ejes UR
-
-    //    // Rotaciones
-    //    rot.x = (float)ur_data_processing.UR_Stream_Data.C_Orientation[0];
-    //    rot.y = (float)ur_data_processing.UR_Stream_Data.C_Orientation[1];
-    //    rot.z = (float)ur_data_processing.UR_Stream_Data.C_Orientation[2];
-
-    //    for (int j = 0; j < 3; j++)
-    //        coordinates[j] = targetpos[j].ToString("F4", CultureInfo.InvariantCulture);
-    //    coordinates[3] = rot.x.ToString("F4", CultureInfo.InvariantCulture);
-    //    coordinates[4] = rot.y.ToString("F4", CultureInfo.InvariantCulture);
-    //    coordinates[5] = rot.z.ToString("F4", CultureInfo.InvariantCulture);
-
-    //    switch (Points[i].type)
-    //    {
-    //        case 0: controller.SendCommandAsync($"movel(p[{string.Join(",", coordinates)}], a=0.5, v=0.05, t=0, r=0)\n"); break;
-    //        case 1: controller.SendCommandAsync($"movej(p[{string.Join(",", coordinates)}], a=0.5, v=0.05, t=0, r=0)\n"); break;
-    //        case 2: controller.SendCommandAsync($"movep(p[{string.Join(",", coordinates)}], a=0.5, v=0.05, r=0)\n"); break;
-    //        case 3:
-    //            gripper_state = !gripper_state;
-    //            gripper_action = true;
-    //            controller.SetDigitalOutputsAsync(gripper_state);
-    //            break;
-    //    }
-
-    //    UnityEngine.Debug.Log($"Comando enviado para punto {i} ({Points[i].type})");
-    //}
-
-
     public class RobotController
     {
         private TcpClient _client;
@@ -1157,5 +1228,130 @@ public class PointsManagement : MonoBehaviour
         }
     }
 
+    public class RealtimeSpeedController
+    {
+        private TcpClient client;
+        private NetworkStream stream;
+        private bool connected = false;
+
+        public void Connect(string ip, int port)
+        {
+            try
+            {
+                if (!connected)
+                {
+                    client = new TcpClient(ip, port);
+                    stream = client.GetStream();
+                    connected = true;
+                    UnityEngine.Debug.Log("[RealtimeSpeedController] Conexión establecida con UR.");
+                }
+            }
+            catch (Exception e)
+            {
+                UnityEngine.Debug.LogError("[RealtimeSpeedController] Error al conectar: " + e.Message);
+                connected = false;
+            }
+        }
+
+        public void SendSpeedCommand(Vector3 linearVelocity)
+        {
+            if (!connected || stream == null)
+            {
+                UnityEngine.Debug.LogWarning("[RealtimeSpeedController] No conectado. Ignorando comando.");
+                return;
+            }
+
+            string command = string.Format(
+                CultureInfo.InvariantCulture,
+                "speedl([{0:F4},{1:F4},{2:F4},0.0,0.0,0.0], 0.5, 0.2)\n",
+                linearVelocity.x, linearVelocity.y, linearVelocity.z);
+
+            UnityEngine.Debug.Log("Comando a enviar:\n" + command);
+
+            byte[] buffer = Encoding.ASCII.GetBytes(command);
+
+            try
+            {
+                stream.Write(buffer, 0, buffer.Length);
+                stream.Flush();
+                UnityEngine.Debug.Log("[RealtimeSpeedController] Comando enviado: " + command);
+            }
+            catch (Exception e)
+            {
+                UnityEngine.Debug.LogError("[RealtimeSpeedController] Error al enviar comando: " + e.Message);
+            }
+        }
+
+        public void Disconnect()
+        {
+            try
+            {
+                stream?.Close();
+                client?.Close();
+                connected = false;
+                UnityEngine.Debug.Log("[RealtimeSpeedController] Conexión cerrada.");
+            }
+            catch (Exception e)
+            {
+                UnityEngine.Debug.LogError("[RealtimeSpeedController] Error al cerrar conexión: " + e.Message);
+            }
+        }
+
+        public bool IsConnected()
+        {
+            return connected;
+        }
+    }
+
 }
 
+
+
+
+
+
+
+
+
+//void SendCommandForPoint(int i)
+//{
+//    if (i >= Points.Length) return;
+
+//    RobotController controller = new RobotController(UIPanel_Control.global_ip_address, ur_data_processing.UR_Control_Data.port_number);
+
+//    if (Points[i].type == 3)
+//    {
+//        targetpos = Points[i - 1].PointObject.transform.localPosition;
+//    }
+//    else
+//    {
+//        targetpos = Points[i].PointObject.transform.localPosition;
+//    }
+
+//    targetpos.z *= -1; // Ejes UR
+
+//    // Rotaciones
+//    rot.x = (float)ur_data_processing.UR_Stream_Data.C_Orientation[0];
+//    rot.y = (float)ur_data_processing.UR_Stream_Data.C_Orientation[1];
+//    rot.z = (float)ur_data_processing.UR_Stream_Data.C_Orientation[2];
+
+//    for (int j = 0; j < 3; j++)
+//        coordinates[j] = targetpos[j].ToString("F4", CultureInfo.InvariantCulture);
+//    coordinates[3] = rot.x.ToString("F4", CultureInfo.InvariantCulture);
+//    coordinates[4] = rot.y.ToString("F4", CultureInfo.InvariantCulture);
+//    coordinates[5] = rot.z.ToString("F4", CultureInfo.InvariantCulture);
+
+//    switch (Points[i].type)
+//    {
+//        case 0: controller.SendCommandAsync($"movel(p[{string.Join(",", coordinates)}], a=0.5, v=0.05, t=0, r=0)\n"); break;
+//        case 1: controller.SendCommandAsync($"movej(p[{string.Join(",", coordinates)}], a=0.5, v=0.05, t=0, r=0)\n"); break;
+//        case 2: controller.SendCommandAsync($"movep(p[{string.Join(",", coordinates)}], a=0.5, v=0.05, r=0)\n"); break;
+//        case 3:
+//            gripper_state = !gripper_state;
+//            gripper_action = true;
+//            controller.SetDigitalOutputsAsync(gripper_state);
+//            break;
+//    }
+
+//    UnityEngine.Debug.Log($"Comando enviado para punto {i} ({Points[i].type})");
+//}
