@@ -1,7 +1,6 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
-using System.Diagnostics;
 using System.Net.Sockets;
 using System;
 using System.Threading;
@@ -10,8 +9,18 @@ using System.Text;
 
 using UnityEngine.UI;
 using UnityEngine;
+using UnityEngine.XR;
+
+// HAND TRACKING PACKAGES
+using MixedReality.Toolkit;
+using MixedReality.Toolkit.Input;
+using MixedReality.Toolkit.Subsystems;
 
 using TMPro;
+using System.Collections.Specialized;
+using System.Diagnostics;
+using static PointsManagement;
+
 
 public class PointsManagement : MonoBehaviour
 {
@@ -29,10 +38,19 @@ public class PointsManagement : MonoBehaviour
     public Vector3 real_rot_Degree = new Vector3();
     public Vector3 real_rot_Radian = new Vector3();
 
-    // Robot Porgramation
+    // Robot Programation
     public GameObject PanelProgramation;
-    // Pick and Place
+
+    // Pick and Place + HAND TRACKING VARIABLES
     public GameObject PickAndPlace;
+    public GameObject RightHand;
+    public GameObject LeftHand;
+    private GameObject Hand;
+
+    private HandsAggregatorSubsystem aggregator;
+
+    public int case_pickandplace;
+    public int activar_pinza;
 
     public GameObject Origin;
     public GameObject Origin_BaseRef;
@@ -64,10 +82,10 @@ public class PointsManagement : MonoBehaviour
     public int cont = 1;
     public int aviso_type = 0;
 
-    //TIPO CLASE PUNTO
+    // TIPO CLASE PUNTO
     public class point
     {
-        // Type is 0 = MoveL ; 1 = MoveJ ; 2 = MoveP
+        // Type is 0 = MoveL ; 1 = MoveJ ; 2 = MoveP; 3 = Gripper
         public int type;
         public GameObject PointObject;
         public LineRenderer line;
@@ -98,6 +116,17 @@ public class PointsManagement : MonoBehaviour
     public float radioGrande = 0f;
     public float radioPequeña = 0f;
 
+    // Pick And Place Points
+    public float altura = 0.1f;           // Movimiento vertical (subir/bajar)
+    public float desplazamiento = 0.3f;
+    public TextMeshProUGUI altura_label, desplazamiento_label;
+    private Vector3[] initialOffsets;
+    private Vector3[] lastPositions;
+
+    // Hand Tracking controller
+
+    public RealtimeSpeedController RobotSpeedController = new RealtimeSpeedController();
+
 
     // Start is called before the first frame update
     void Start()
@@ -110,6 +139,11 @@ public class PointsManagement : MonoBehaviour
         gripper_state = true;
         completed = false;
         gripper_action = false;
+
+        // HAND TRACKING VARIABLES
+        aggregator = XRSubsystemHelpers.GetFirstRunningSubsystem<HandsAggregatorSubsystem>();
+        case_pickandplace = 0;
+        activar_pinza = 0;
     }
 
     void inicio()
@@ -149,6 +183,35 @@ public class PointsManagement : MonoBehaviour
                 aviso_type = 1;
             }
         }
+    }
+
+    public void createmoveL_Pos(Vector3 delta)
+    {
+        if (isInside == false)
+        {
+            aviso_type = 2;
+        }
+        else
+        {
+            if (cont_points < 200)
+            {
+                Vector3 newPosition = Points[cont_points - 1].PointObject.transform.position + delta;
+                GameObject newObject = Instantiate(MoveL_Point, newPosition, Points[cont_points - 1].PointObject.transform.rotation);
+                AddToArray(newObject, 0);
+                newObject.SetActive(true);
+                newObject.transform.SetParent(PointsParent, false);
+                newObject.transform.position = newPosition;
+
+                // Hacer el objeto el doble de pequeño
+            newObject.transform.localScale = newObject.transform.localScale * 0.3f;
+
+            }
+            else
+            {
+                aviso_type = 1;
+            }
+        }
+
     }
 
     public void createmoveJ()
@@ -217,6 +280,25 @@ public class PointsManagement : MonoBehaviour
             {
                 aviso_type = 1;
             }
+        }
+    }
+
+    public void createGripperHandTracking()
+    {
+        /*
+         * gripper_state = !gripper_state;
+        RobotController controller = new RobotController(UIPanel_Control.global_ip_address, ur_data_processing.UR_Control_Data.port_number);
+        controller.SetDigitalOutputsAsync(gripper_state);
+        */
+        gripper_state = !gripper_state;
+
+        if (RobotSpeedController != null && RobotSpeedController.IsConnected())
+        {
+            RobotSpeedController.SetDigitalOutputs(gripper_state);
+        }
+        else
+        {
+            UnityEngine.Debug.LogWarning("Controlador no conectado para el cambio de pinza.");
         }
     }
 
@@ -330,11 +412,54 @@ public class PointsManagement : MonoBehaviour
         }
     }
 
+    public void Sum_Altura()
+    {
+        altura = altura + 0.02f;
+        UpdateVelDespl();
+    }
+
+    public void Sum_Desplazamiento()
+    {
+        desplazamiento = desplazamiento + 0.02f;
+        UpdateVelDespl();
+    }
+
+    public void Rest_Altura()
+    {
+        if (altura > 0.02)
+        {
+            altura = altura - 0.02f;
+            UpdateVelDespl();
+        }
+        else
+        {
+            altura = 0.02f;
+
+        }
+
+    }
+
+    public void Rest_Desplazamiento()
+    {
+        if(desplazamiento > 0.02)
+        {
+            desplazamiento = desplazamiento - 0.02f;
+            UpdateVelDespl();
+        }
+        else
+        {
+            desplazamiento = 0.02f;
+
+        }
+ 
+    }
+
+
+
     public void CreatePickandPlace4Points()
     {
-
-        float altura = 0.1f;           // Movimiento vertical (subir/bajar)
-        float desplazamiento = 0.3f;   // Movimiento horizontal entre pick y place
+        case_pickandplace = 1;
+         // Movimiento horizontal entre pick y place
 
         // Guardamos el origen
         Vector3 origen = Points[0].PointObject.transform.position;
@@ -368,21 +493,370 @@ public class PointsManagement : MonoBehaviour
         createGripper();
         Points[7].PointObject.transform.position = origen + Vector3.forward * desplazamiento + Vector3.right * desplazamiento;
 
-        // --- Punto 8: volver al origen ---
+        // --- Punto 8: encima del punto de destino ---
         createmoveL();
-        Points[8].PointObject.transform.position = origen;
+            Points[8].PointObject.transform.position = Points[5].PointObject.transform.position;
+        // --- Punto 9: volver al origen ---
+        createmoveL();
+        Points[9].PointObject.transform.position = origen;
+
+        int n = Points.Length;
+        initialOffsets = new Vector3[n];
+        lastPositions = new Vector3[n];
+
+        Vector3 basePos = Points[1].PointObject.transform.position;
+        for (int i = 1; i < n; i++)
+        {
+            initialOffsets[i] = Points[i].PointObject.transform.position - basePos;
+            lastPositions[i] = Points[i].PointObject.transform.position;
+        }
+
+    }
+
+    public void UpdateVelDespl()
+    {
+        // --- Punto 1: encima del punto de recogida ---
+        Points[1].PointObject.transform.position = Points[0].PointObject.transform.position + Vector3.forward * desplazamiento + Vector3.up * altura;
+
+        // --- Punto 2: punto de recogida ---
+        Points[2].PointObject.transform.position = Points[0].PointObject.transform.position + Vector3.forward * desplazamiento;
+
+        // --- Punto 3: cerrar gripper ---
+        Points[3].PointObject.transform.position = Points[0].PointObject.transform.position + Vector3.forward * desplazamiento;
+
+        // --- Punto 4: subir con objeto ---
+        Points[4].PointObject.transform.position = Points[0].PointObject.transform.position + Vector3.forward * desplazamiento + Vector3.up * altura;
+
+        // --- Punto 5: mover al destino (horizontal derecha) ---
+        Points[5].PointObject.transform.position = Points[0].PointObject.transform.position + Vector3.forward * desplazamiento + Vector3.right * desplazamiento + Vector3.up * altura;
+
+        // --- Punto 6: bajar al destino ---
+        Points[6].PointObject.transform.position = Points[0].PointObject.transform.position + Vector3.forward * desplazamiento + Vector3.right * desplazamiento;
+
+        // --- Punto 7: abrir gripper ---
+        Points[7].PointObject.transform.position = Points[0].PointObject.transform.position + Vector3.forward * desplazamiento + Vector3.right * desplazamiento;
+
+        // --- Punto 8: encima del punto de destino ---
+        Points[8].PointObject.transform.position = Points[5].PointObject.transform.position;
+        Points[9].PointObject.transform.position = Points[0].PointObject.transform.position;
+        for (int i = 0; i < Points.Length; i++)
+        {
+            lastPositions[i] = Points[i].PointObject.transform.position;
+        }
+    }
+
+    public void MoverTodosRelativoA(int indexChanged, Vector3 delta)
+    {
+        for (int i = 1; i < Points.Length; i++)
+        {
+            if (i != indexChanged)
+            {
+                Points[i].PointObject.transform.position += delta;
+            }
+            lastPositions[i] = Points[i].PointObject.transform.position;
+        }
+    }
+
+    public void AjustarPuntosVerticales()
+    {
+        // Punto 3 = justo encima del 2
+        if (Points.Length > 3)
+        {
+            Vector3 base2 = Points[2].PointObject.transform.position;
+            Points[3].PointObject.transform.position = new Vector3(base2.x, base2.y, base2.z);
+            lastPositions[3] = Points[3].PointObject.transform.position;
+        }
+
+        // Punto 7 = justo encima del 6
+        if (Points.Length > 7)
+        {
+            Vector3 base6 = Points[6].PointObject.transform.position;
+            Points[7].PointObject.transform.position = new Vector3(base6.x, base6.y, base6.z);
+            lastPositions[7] = Points[7].PointObject.transform.position;
+        }
     }
 
 
-// Update is called once per frame
-void Update()
+    public void StartHandTracking()
     {
+        case_pickandplace = 2;
+        RobotSpeedController.Connect(UIPanel_Control.global_ip_address, ur_data_processing.UR_Control_Data.port_number);
+    }
+
+    private GameObject trackedHand = null; // la mano que se está siguiendo
+    private bool handDetected = false;
+    private float handDetectedStartTime = 0f;
+    private bool trackingActive = false;
+    private bool wasPinching = false;
+
+    private Vector3 lastHandPosition;
+    private float lastMoveLTime = 0f;
+    private float waitDuration = 2.0f;
+    private float intervalMoveL = 0.7f;
+
+    private bool waitingForArrival = false;
+    private float waitStartTime = 0f;
+
+
+
+    // Update is called once per frame
+    void Update()
+    {
+        // HAND TRACKING AND PICK AND PLACE CODE
+
+        //Algoritmo pick and place
+        switch (case_pickandplace)
+        {
+            case 1:
+                if(bandera_sendcommand == false)
+                {
+                    for (int i = 1; i < Points.Length; i++)
+                    {
+                        Vector3 currentPos = Points[i].PointObject.transform.position;
+                        if (currentPos != lastPositions[i])
+                        {
+                            Vector3 delta = currentPos - lastPositions[i];
+                            MoverTodosRelativoA(i, delta);
+                            break; // Solo responde a un cambio por frame
+                        }
+                    }
+                    Points[9].PointObject.transform.position = Points[0].PointObject.transform.position;
+                    // Puntos especiales que siempre deben estar sobre otro
+                    AjustarPuntosVerticales();
+                }
+                
+                altura_label.text = altura.ToString("F2", CultureInfo.InvariantCulture);
+                desplazamiento_label.text = desplazamiento.ToString("F2", CultureInfo.InvariantCulture);
+
+                break;
+            case 2:
+
+                /*
+                // 1. Detectar mano derecha y mostrar su posición
+                if (aggregator.TryGetJoint(TrackedHandJoint.Palm, XRNode.RightHand, out HandJointPose rightPalm))
+                {
+                    Hand = RightHand;
+                }
+                // 2. Detectar mano izquierda
+                else
+                {
+                    if (aggregator.TryGetJoint(TrackedHandJoint.Palm, XRNode.LeftHand, out HandJointPose leftPalm))
+                    {
+                        Hand = LeftHand;
+                    }
+                    else
+                    {
+                        Hand = null;
+                    }
+                }
+                
+                // 2. Evaluar si hay mano visible
+                if (Hand != null)
+                {
+                    if (!handDetected || trackedHand != Hand)
+                    {
+                        // Primera vez o cambio de mano -> reiniciar temporizador
+                        handDetected = true;
+                        handDetectedStartTime = Time.time;
+                        trackedHand = Hand;
+                        UnityEngine.Debug.Log("Empezando Cuenta hasta 2 segundos");
+                    }
+                    else
+                    {
+                        float timeHeld = Time.time - handDetectedStartTime;
+
+                        if (!trackingActive && timeHeld >= waitDuration)
+                        {
+                            // Activar seguimiento
+                            trackingActive = true;
+                            lastHandPosition = Hand.transform.position;
+                            lastMoveLTime = Time.time;
+                            UnityEngine.Debug.Log("Seguimiento activado");
+                        }
+                    }
+                }
+                else
+                {
+                    // Mano no visible -> reset
+                    if (handDetected || trackingActive)
+
+                        UnityEngine.Debug.Log("Mano perdida. Reiniciando seguimiento.");
+
+                    handDetected = false;
+                    trackingActive = false;
+                    trackedHand = null;
+                }
+
+                // 3. Si el seguimiento está activo -> aplicar traslación cada 0.5 s
+                if (trackingActive && Time.time - lastMoveLTime >= intervalMoveL && Hand != null)
+                {
+                    Vector3 currentPosition = Hand.transform.position;
+                    Vector3 delta = currentPosition - lastHandPosition;
+
+                    lastHandPosition = currentPosition;
+                    lastMoveLTime = Time.time;
+                    if (!waitingForArrival && delta.magnitude >= 0.01f)
+                    {
+                        createmoveL_Pos(delta);
+                        UnityEngine.Debug.Log("Punto CREADOOO");
+                    }
+                    
+
+                    // Iniciar la secuencia solo si hay al menos 2 puntos
+                    if (!bandera_sendcommand && Points.Length >= 2)
+                    {
+                        UnityEngine.Debug.Log("Inicio de secuencia de envío de puntos");
+                        //sendcommand();
+                    }
+                }
+
+                // 4. Detectar gesto de pinza solo si hay seguimiento activo y mano válida
+                if (trackingActive && Hand != null)
+                {
+                    if (trackingActive && Hand != null)
+                    {
+                        XRNode currentHandNode = Hand == RightHand ? XRNode.RightHand : XRNode.LeftHand;
+
+                        if (aggregator.TryGetPinchProgress(currentHandNode, out bool isReadyToPinch, out bool isPinching, out float pinchAmount))
+                        {
+                            if (isPinching != wasPinching)
+                            {
+                                // Cambio de estado: ha empezado o ha dejado de hacer pinch
+                                createGripper();
+                                UnityEngine.Debug.Log("Cambio de estado de pinza -> Ejecutar createGripper()");
+                            }
+
+                            wasPinching = isPinching; // actualizar estado actual
+                        }
+                        else
+                        {
+                            // No hay datos -> reiniciamos estado para evitar inconsistencias
+                            wasPinching = false;
+                        }
+                    }
+                    else
+                    {
+                        // Si se pierde la mano, reiniciar
+                        wasPinching = false;
+                    }
+
+
+                }
+
+                */
+
+
+                // 1. Detectar mano derecha y mostrar su posición
+                if (aggregator.TryGetJoint(TrackedHandJoint.Palm, XRNode.RightHand, out HandJointPose rightPalm))
+                {
+                    Hand = RightHand;
+                }
+                // 2. Detectar mano izquierda
+                else if (aggregator.TryGetJoint(TrackedHandJoint.Palm, XRNode.LeftHand, out HandJointPose leftPalm))
+                {
+                    Hand = LeftHand;
+                }
+                else
+                {
+                    Hand = null;
+                }
+
+                // 3. Evaluar si hay mano visible
+                if (Hand != null)
+                {
+                    if (!handDetected || trackedHand != Hand)
+                    {
+                        // Primera vez o cambio de mano -> reiniciar temporizador
+                        handDetected = true;
+                        handDetectedStartTime = Time.time;
+                        trackedHand = Hand;
+                        UnityEngine.Debug.Log("Empezando Cuenta hasta 2 segundos");
+                    }
+                    else
+                    {
+                        float timeHeld = Time.time - handDetectedStartTime;
+
+                        if (!trackingActive && timeHeld >= waitDuration)
+                        {
+                            // Activar seguimiento
+                            trackingActive = true;
+                            lastHandPosition = Hand.transform.position;
+                            UnityEngine.Debug.Log("Seguimiento activado");
+                        }
+                    }
+                }
+                else
+                {
+                    // Mano no visible -> detener seguimiento y parar el robot
+                    if (handDetected || trackingActive)
+                    {
+                        UnityEngine.Debug.Log("Mano perdida. Reiniciando seguimiento.");
+                        RobotSpeedController.SendSpeedCommand(Vector3.zero);  // Parar robot
+                    }
+
+                    handDetected = false;
+                    trackingActive = false;
+                    trackedHand = null;
+                    wasPinching = false;
+                }
+
+                // 4. Seguimiento activo -> enviar velocidad con speedl()
+                if (trackingActive && Hand != null)
+                {
+                    Vector3 currentPosition = Hand.transform.position;
+                    Vector3 delta = currentPosition - lastHandPosition;
+                    lastHandPosition = currentPosition;
+
+                    // Calcular velocidad
+                    Vector3 velocity = delta / Time.deltaTime;
+
+                    // Limitar velocidad máxima
+                    float maxSpeed = 0.2f;
+                    if (velocity.magnitude > maxSpeed)
+                        velocity = velocity.normalized * maxSpeed;
+
+                    // Convertir a coordenadas UR (invertir Z)
+                    // ES NECESARIO HACER CONVERSION DE COORDENADAS AL TENER LA MANO OTRA REFERENCIA A LA DEL ROBOT
+                    Vector3 urSpeed = new Vector3(velocity.z, -velocity.x,velocity.y );
+
+                    // Enviar comando de velocidad al robot
+                    RobotSpeedController.SendSpeedCommand(urSpeed);
+
+                    // --- Gesto de pinza ---
+                    XRNode currentHandNode = Hand == RightHand ? XRNode.RightHand : XRNode.LeftHand;
+
+                    if (aggregator.TryGetPinchProgress(currentHandNode, out bool isReadyToPinch, out bool isPinching, out float pinchAmount))
+                    {
+                        if (isPinching != wasPinching)
+                        {
+                            RobotSpeedController.SendSpeedCommand(Vector3.zero);  // Parar robot
+                            createGripperHandTracking();
+                            UnityEngine.Debug.Log("Cambio de estado de pinza -> Ejecutar createGripper()");
+                        }
+                        wasPinching = isPinching;
+                    }
+                    else
+                    {
+                        wasPinching = false;
+                    }
+                }
+
+
+
+
+                break;
+            case 3:
+
+                break;
+        }
+
         offsetpos.x = Math.Abs(targetpos.x - (float)ur_data_processing.UR_Stream_Data.C_Position[0]);
         offsetpos.y = Math.Abs(targetpos.y - (float)ur_data_processing.UR_Stream_Data.C_Position[1]);
         offsetpos.z = Math.Abs(targetpos.z - (float)ur_data_processing.UR_Stream_Data.C_Position[2]);
 
 
         gripper_bandera = gripper_action;
+
 
         /*
         //Pruebas
@@ -461,12 +935,17 @@ void Update()
         {
             UpdateConnections();
         }
-        
-        if (bandera_sendcommand) {
+
+        // ctrl + k --> ctrl + c (comentar)
+        // ctrl + k --> ctrl + u (descomentar)
+        if (bandera_sendcommand)
+        {
 
             if (offsetpos.x < 0.001 && offsetpos.y < 0.001 && offsetpos.z < 0.001 && gripper_action == false)
             {
+
                 cont++;
+                waitingForArrival = false;
 
                 // YOU NEED TO MAKE SURE THE BASE AXES REFERENCES OF THE ROBOT ARE THE SAME AS UNITY, FOR YOUR SECURITY
                 RobotController controller = new RobotController(UIPanel_Control.global_ip_address, ur_data_processing.UR_Control_Data.port_number);
@@ -483,7 +962,6 @@ void Update()
                     targetpos.y = Points[cont].PointObject.transform.localPosition.y;
                     targetpos.z = -Points[cont].PointObject.transform.localPosition.z;
                 }
-               
 
                 // Conversion of rotation axes
                 // Aplicar la nueva rotación al objeto
@@ -491,15 +969,12 @@ void Update()
                 rot.y = (float)ur_data_processing.UR_Stream_Data.C_Orientation[1];
                 rot.z = (float)ur_data_processing.UR_Stream_Data.C_Orientation[2];
 
-
-
                 coordinates[0] = targetpos.x.ToString("F4", CultureInfo.InvariantCulture);
                 coordinates[1] = targetpos.y.ToString("F4", CultureInfo.InvariantCulture);
                 coordinates[2] = targetpos.z.ToString("F4", CultureInfo.InvariantCulture);
                 coordinates[3] = rot.x.ToString("F4", CultureInfo.InvariantCulture);
                 coordinates[4] = rot.y.ToString("F4", CultureInfo.InvariantCulture);
                 coordinates[5] = rot.z.ToString("F4", CultureInfo.InvariantCulture);
-
 
                 switch (Points[cont].type)
                 {
@@ -520,22 +995,69 @@ void Update()
                 }
             }
 
-            if (cont == Points.Length - 1)
-            {
-                    UnityEngine.Debug.Log("Finished!!");
-                    bandera_sendcommand = false;
-                    cont = 1;
-            }
 
-            /*
-            if (offsetpos.x < 0.001 && offsetpos.y < 0.001 && offsetpos.z < 0.001)
+            if (cont == Points.Length - 1 && (case_pickandplace == 0))
             {
-                completed = true;
-                // Block the code until the robot makes the movement
+                UnityEngine.Debug.Log("Finished!!");
+                bandera_sendcommand = false;
+                cont = 1;
+                waitingForArrival = false;
             }
-            */
+            if (cont == Points.Length - 1 && (case_pickandplace == 2))
+            {
+                UnityEngine.Debug.Log("Finished!! No more points!!");
+                bandera_sendcommand = false;
+                waitingForArrival = false;
+            }
         }
-    
+
+
+
+        //if (bandera_sendcommand)
+        //{
+        //    if (cont < Points.Length) // evitar sobrepasar el array
+        //    {
+        //        if (offsetpos.x < 0.001f && offsetpos.y < 0.001f && offsetpos.z < 0.001f && !gripper_action)
+        //        {
+        //            // Enviar siguiente comando
+        //            SendCommandForPoint(cont);
+
+        //            // Marcar que el punto ha sido enviado y esperar
+        //            bandera_sendcommand = false;
+        //            waitingForArrival = true;
+        //            waitStartTime = Time.time;
+        //        }
+        //    }
+
+        //    if (waitingForArrival)
+        //    {
+        //        // Esperar que el robot llegue antes de continuar
+        //        float elapsed = Time.time - waitStartTime;
+
+        //        if (offsetpos.x < 0.001f && offsetpos.y < 0.001f && offsetpos.z < 0.001f && !gripper_action && elapsed > 0.5f)
+        //        {
+        //            // Punto completado
+        //            if (case_pickandplace == 2 && cont > 1)
+        //            {
+        //                Destroy(Points[cont - 1].PointObject);
+        //                Destroy(Points[cont - 1].line);
+        //                UnityEngine.Debug.Log("Punto procesado y destruido");
+        //            }
+
+        //            cont++;
+        //            bandera_sendcommand = true;
+        //            waitingForArrival = false;
+        //        }
+        //    }
+
+        //    if (cont >= Points.Length)
+        //    {
+        //        UnityEngine.Debug.Log("Todos los puntos enviados");
+        //        bandera_sendcommand = false;
+        //        cont = 1;
+        //    }
+        //}
+
 
     }
 
@@ -616,9 +1138,21 @@ void Update()
         // YOU NEED TO MAKE SURE THE BASE AXES REFERENCES OF THE ROBOT ARE THE SAME AS UNITY, FOR YOUR SECURITY
         RobotController controller = new RobotController(UIPanel_Control.global_ip_address, ur_data_processing.UR_Control_Data.port_number);
 
-        targetpos.x = Points[1].PointObject.transform.localPosition.x;
-        targetpos.y = Points[1].PointObject.transform.localPosition.y;
-        targetpos.z = -Points[1].PointObject.transform.localPosition.z;
+        float condition = -Points[cont].PointObject.transform.localPosition.z;
+        if (condition > 0.05)
+        {
+            targetpos.x = Points[cont].PointObject.transform.localPosition.x;
+            targetpos.y = Points[cont].PointObject.transform.localPosition.y;
+            targetpos.z = -Points[cont].PointObject.transform.localPosition.z;
+            UnityEngine.Debug.Log("Punto Encima de la horizontal del robot!!");
+        }
+        else
+        {
+            UnityEngine.Debug.Log("Punto debajo de la horizontal del robot!!");
+            targetpos.x = Points[cont].PointObject.transform.localPosition.x;
+            targetpos.y = Points[cont].PointObject.transform.localPosition.y;
+            targetpos.z = (float)0.05;
+        }
 
         // Conversion of rotation axes
         // Aplicar la nueva rotación al objeto
@@ -639,7 +1173,7 @@ void Update()
         offsetpos.y = Math.Abs(targetpos.y - (float)ur_data_processing.UR_Stream_Data.C_Position[1]);
         offsetpos.z = Math.Abs(targetpos.z - (float)ur_data_processing.UR_Stream_Data.C_Position[2]);
 
-        switch (Points[1].type)
+        switch (Points[cont].type)
         {
             case 0: //MoveL
                 controller.SendCommandAsync("movel(p[" + coordinates[0] + "," + coordinates[1] + "," + coordinates[2] + "," + coordinates[3] + "," + coordinates[4] + "," + coordinates[5] + "], a = 0.5, v=0.05, t=0, r=0)" + "\n");
@@ -655,7 +1189,7 @@ void Update()
                 controller.SetDigitalOutputsAsync(gripper_state);
                 break;
         }
-
+        waitingForArrival = true;
         bandera_sendcommand = true;
     }
 
@@ -706,5 +1240,164 @@ void Update()
         }
     }
 
+    public class RealtimeSpeedController
+    {
+        private TcpClient client;
+        private NetworkStream stream;
+        private bool connected = false;
+
+        public void Connect(string ip, int port)
+        {
+            try
+            {
+                if (!connected)
+                {
+                    client = new TcpClient(ip, port);
+                    stream = client.GetStream();
+                    connected = true;
+                    UnityEngine.Debug.Log("[RealtimeSpeedController] Conexión establecida con UR.");
+                }
+            }
+            catch (Exception e)
+            {
+                UnityEngine.Debug.LogError("[RealtimeSpeedController] Error al conectar: " + e.Message);
+                connected = false;
+            }
+        }
+
+        public void SendSpeedCommand(Vector3 linearVelocity)
+        {
+            if (!connected || stream == null)
+            {
+                UnityEngine.Debug.LogWarning("[RealtimeSpeedController] No conectado. Ignorando comando.");
+                return;
+            }
+
+            string command = string.Format(
+                CultureInfo.InvariantCulture,
+                "speedl([{0:F4},{1:F4},{2:F4},0.0,0.0,0.0], 0.5, 0.2)\n",
+                linearVelocity.x, linearVelocity.y, linearVelocity.z);
+
+            UnityEngine.Debug.Log("Comando a enviar:\n" + command);
+
+            byte[] buffer = Encoding.ASCII.GetBytes(command);
+
+            try
+            {
+                stream.Write(buffer, 0, buffer.Length);
+                stream.Flush();
+                UnityEngine.Debug.Log("[RealtimeSpeedController] Comando enviado: " + command);
+            }
+            catch (Exception e)
+            {
+                UnityEngine.Debug.LogError("[RealtimeSpeedController] Error al enviar comando: " + e.Message);
+            }
+        }
+
+        public void Disconnect()
+        {
+            try
+            {
+                stream?.Close();
+                client?.Close();
+                connected = false;
+                UnityEngine.Debug.Log("[RealtimeSpeedController] Conexión cerrada.");
+            }
+            catch (Exception e)
+            {
+                UnityEngine.Debug.LogError("[RealtimeSpeedController] Error al cerrar conexión: " + e.Message);
+            }
+        }
+
+        public bool IsConnected()
+        {
+            return connected;
+        }
+
+        public void SetDigitalOutputs(bool gripperState)
+        {
+            if (!connected || stream == null)
+            {
+                UnityEngine.Debug.LogWarning("[RealtimeSpeedController] No conectado. Ignorando comando de pinza.");
+                return;
+            }
+
+            try
+            {
+                // Comando OFF luego ON para asegurar el cambio de estado
+                string command1 = $"set_tool_digital_out({(gripperState ? "1" : "0")}, False)\n";
+                string command2 = $"set_tool_digital_out({(gripperState ? "0" : "1")}, True)\n";
+
+                byte[] buffer1 = Encoding.ASCII.GetBytes(command1);
+                byte[] buffer2 = Encoding.ASCII.GetBytes(command2);
+
+                stream.Write(buffer1, 0, buffer1.Length);
+                stream.Flush();
+                Thread.Sleep(500); // Esperar medio segundo
+
+                stream.Write(buffer2, 0, buffer2.Length);
+                stream.Flush();
+                Thread.Sleep(1500); // Esperar a que la pinza actúe
+
+                UnityEngine.Debug.Log("[RealtimeSpeedController] Comando de pinza enviado correctamente.");
+            }
+            catch (Exception e)
+            {
+                UnityEngine.Debug.LogError("[RealtimeSpeedController] Error al enviar comando de pinza: " + e.Message);
+            }
+        }
+
+    }
+
 }
 
+
+
+
+
+
+
+
+
+//void SendCommandForPoint(int i)
+//{
+//    if (i >= Points.Length) return;
+
+//    RobotController controller = new RobotController(UIPanel_Control.global_ip_address, ur_data_processing.UR_Control_Data.port_number);
+
+//    if (Points[i].type == 3)
+//    {
+//        targetpos = Points[i - 1].PointObject.transform.localPosition;
+//    }
+//    else
+//    {
+//        targetpos = Points[i].PointObject.transform.localPosition;
+//    }
+
+//    targetpos.z *= -1; // Ejes UR
+
+//    // Rotaciones
+//    rot.x = (float)ur_data_processing.UR_Stream_Data.C_Orientation[0];
+//    rot.y = (float)ur_data_processing.UR_Stream_Data.C_Orientation[1];
+//    rot.z = (float)ur_data_processing.UR_Stream_Data.C_Orientation[2];
+
+//    for (int j = 0; j < 3; j++)
+//        coordinates[j] = targetpos[j].ToString("F4", CultureInfo.InvariantCulture);
+//    coordinates[3] = rot.x.ToString("F4", CultureInfo.InvariantCulture);
+//    coordinates[4] = rot.y.ToString("F4", CultureInfo.InvariantCulture);
+//    coordinates[5] = rot.z.ToString("F4", CultureInfo.InvariantCulture);
+
+//    switch (Points[i].type)
+//    {
+//        case 0: controller.SendCommandAsync($"movel(p[{string.Join(",", coordinates)}], a=0.5, v=0.05, t=0, r=0)\n"); break;
+//        case 1: controller.SendCommandAsync($"movej(p[{string.Join(",", coordinates)}], a=0.5, v=0.05, t=0, r=0)\n"); break;
+//        case 2: controller.SendCommandAsync($"movep(p[{string.Join(",", coordinates)}], a=0.5, v=0.05, r=0)\n"); break;
+//        case 3:
+//            gripper_state = !gripper_state;
+//            gripper_action = true;
+//            controller.SetDigitalOutputsAsync(gripper_state);
+//            break;
+//    }
+
+//    UnityEngine.Debug.Log($"Comando enviado para punto {i} ({Points[i].type})");
+//}
