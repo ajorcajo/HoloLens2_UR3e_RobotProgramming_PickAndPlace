@@ -36,8 +36,8 @@ There are different useful panels that can help students to understand concepts 
 
 ## Results with video
 
-[Youtube Video UR_Hololens2_Unity](https://youtu.be/5jKLdiqAFmI)
-
+[Youtube Video UR_Hololens2_Unity --> Robot Programming with HoloLens 2](https://youtu.be/5jKLdiqAFmI)
+[Youtube Video PickAndPlace Tasks with HoloLens 2 --> HandTracking and Robot Programming](https://www.youtube.com/watch?v=4E2pt7xgKX0)
 
 
 ## Contact
